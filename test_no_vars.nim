@@ -21,7 +21,14 @@ macro findDeclarableStructs*(typed_code_block : typed, untyped_block_code : unty
 
             #Look for ptr types
             if var_type.kind == nnkPtrTy:
-                let type_name_str = var_type[0].strVal
+                
+                var type_name = var_type[0]
+
+                #generics, extract the name from bracket
+                if type_name.kind == nnkBracketExpr:
+                    type_name = type_name[0]
+
+                let type_name_str = type_name.strVal
                 
                 #Found a struct!
                 if type_name_str[len(type_name_str) - 4..type_name_str.high] == "_obj":
@@ -126,43 +133,3 @@ macro findDeclarableVariables*(code_block : untyped) : untyped =
     return quote do:
         #Need to run through an evaluation in order to get the typed information of the block:
         findDeclarableStructs(`final_block`, `code_block`)
-
-#Emulate struct types too
-type 
-    SomeType_obj = object
-        field : float
-    
-    SomeType = ptr SomeType_obj
-
-proc init(obj_type : typedesc[SomeType], field_val : float) : SomeType =
-    result = cast[SomeType](alloc(sizeof(SomeType_obj)))
-    result.field = field_val
-
-#[
-expandMacros:
-    findDeclarableVariables:
-        a = 0.0
-        #a : float
-        #a : float = 0.0
-
-        echo a
-
-        #b : SomeType #Not allowed. struct types must be initialized.
-        #b  = SomeType.init(0.0)
-        b : SomeType = SomeType.init(0.0)
-]#
-
-#[ dumpAstGen:
-    def mySine[T](a : T) {T}:
-        return sin(a)
-
-    def mySine[T](a : T) T:
-        return sin(a)
-    
-    def mySine[T](a : T) => T:
-        return sin(a) ]#
-
-#[ 
-    def mySine[T](a : T) -> T:
-        return sin(a)
-]#

@@ -1,6 +1,6 @@
 import macros, math, test_no_vars
 
-macro def(function_signature : untyped, code_block : untyped) : untyped =
+macro def*(function_signature : untyped, code_block : untyped) : untyped =
     var 
         proc_def = nnkProcDef.newTree()
         proc_return_type : NimNode
@@ -18,9 +18,7 @@ macro def(function_signature : untyped, code_block : untyped) : untyped =
     
     let function_signature_kind = function_signature.kind
 
-    #echo astGenRepr function_signature
-
-    if function_signature_kind == nnkCommand or function_signature_kind == nnkObjConstr or function_signature_kind == nnkCall:
+    if function_signature_kind == nnkCommand or function_signature_kind == nnkObjConstr or function_signature_kind == nnkCall or function_signature_kind == nnkInfix:
         
         var name_with_args : NimNode
 
@@ -28,9 +26,18 @@ macro def(function_signature : untyped, code_block : untyped) : untyped =
         if function_signature_kind == nnkObjConstr or function_signature_kind == nnkCall:
             name_with_args = function_signature
             proc_return_type = newIdentNode("float")
-        else:
+        
+        elif function_signature_kind == nnkCommand:
             name_with_args   = function_signature[0]
             proc_return_type = function_signature[1]
+        
+        elif function_signature_kind == nnkInfix:
+            
+            if function_signature[0].strVal() != "=>":
+                error "def: invalid return operator: \"" & $function_signature[0] & "\". Use \"=>\"."
+            
+            name_with_args   = function_signature[1]
+            proc_return_type = function_signature[2]
 
         let first_statement = name_with_args[0]
         
@@ -43,7 +50,7 @@ macro def(function_signature : untyped, code_block : untyped) : untyped =
                     continue
 
                 if entry.kind == nnkExprColonExpr:
-                    error "Can't specify generics value \"" & $entry[0].strVal & " : " & $entry[1].strVal & "\" for \"def " & $proc_name.strVal & "\". It is defaulted to be \"SomeNumber\"."
+                    error "def: can't specify generics value \"" & $entry[0].strVal & " : " & $entry[1].strVal & "\" for \"def " & $proc_name.strVal & "\". It is defaulted to be \"SomeNumber\"."
                 
                 #Generics (for now) can only be SomeNumber
                 proc_generic_params.add(
@@ -166,21 +173,21 @@ echo mySine3(0.34)
 echo mySine4(0.34)
 echo mySine5(0.34)
 
-#dumpAstGen:
-    #[ proc mySine[T : SomeNumber](a : T) : T =
-        return sin(a) ]#
+#Emulate struct types too
+type 
+    SomeType_obj[T] = object
+        field : T
     
-    #[ proc mySine[T : SomeNumber, Y : SomeNumber](a : T, b : Y) : T =
-        return sin(a + b)
-    ]#
-    #[ proc mySine(a : float = 0.0) : void =
-        let b = sin(a)
+    SomeType[T] = ptr SomeType_obj[T]
 
-    proc mySine(a : float = 0.0) : float =
-        return sin(a) ]#
+proc init[T](obj_type : typedesc[SomeType[T]], field_val : T) : SomeType[T] =
+    result = cast[SomeType[T]](alloc(sizeof(SomeType_obj[T])))
+    result.field = field_val
 
-#[ dumpAstGen:
-    proc testFunc(a : float): float =
-        findDeclarableVariables:
-          b = 0.3
-          return (a * a) + b ]#
+def initSomeType[T](field_val : T 0.0) => SomeType[T]:
+    return SomeType.init(field_val)
+
+findDeclarableVariables:
+    a = initSomeType()
+    echo a[]
+    dealloc cast[pointer](a)
